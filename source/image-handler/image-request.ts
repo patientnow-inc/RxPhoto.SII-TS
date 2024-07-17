@@ -526,7 +526,21 @@ export class ImageRequest {
         const { signature } = queryStringParameters;
         const secret = JSON.parse(await this.secretProvider.getSecret(SECRETS_MANAGER));
         const key = secret[SECRET_KEY];
-        const hash = createHmac("sha256", key).update(path).digest("hex");
+
+        // Get image request from the path
+        const encodedObject = path.substring(1);
+        const stringifiedObject = atob(encodedObject);
+        const imageRequest = JSON.parse(stringifiedObject);
+
+        // Use only `bucket` and `key` keys to generate a hash for signature validation
+        const imageRequestToSign = {
+          bucket: imageRequest.bucket,
+          key: imageRequest.key
+        }
+        const stringifiedObjectToSign = JSON.stringify(imageRequestToSign);
+        const encodedObjectToSign = btoa(stringifiedObjectToSign);
+        const pathToSign = "/" + encodedObjectToSign;
+        const hash = createHmac("sha256", key).update(pathToSign).digest("hex");
 
         // Signature should be made with the full path.
         if (signature !== hash) {
