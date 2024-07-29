@@ -1137,6 +1137,84 @@ exports[`Serverless Image Handler Stack Snapshot 1`] = `
               },
             },
             {
+              "Action": "s3:PutObject",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Split": [
+                  ",",
+                  {
+                    "Fn::Sub": [
+                      "arn:aws:s3:::\${rest}/*",
+                      {
+                        "rest": {
+                          "Fn::Join": [
+                            "/*,arn:aws:s3:::",
+                            {
+                              "Fn::Split": [
+                                ",",
+                                {
+                                  "Fn::Join": [
+                                    "",
+                                    {
+                                      "Fn::Split": [
+                                        " ",
+                                        {
+                                          "Ref": "SourceBucketsParameter",
+                                        },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            {
+              "Action": "s3:headObject",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Split": [
+                  ",",
+                  {
+                    "Fn::Sub": [
+                      "arn:aws:s3:::\${rest}/*",
+                      {
+                        "rest": {
+                          "Fn::Join": [
+                            "/*,arn:aws:s3:::",
+                            {
+                              "Fn::Split": [
+                                ",",
+                                {
+                                  "Fn::Join": [
+                                    "",
+                                    {
+                                      "Fn::Split": [
+                                        " ",
+                                        {
+                                          "Ref": "SourceBucketsParameter",
+                                        },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      },
+                    ],
+                  },
+                ],
+              },
+            },
+            {
               "Action": "s3:GetObject",
               "Effect": "Allow",
               "Resource": {

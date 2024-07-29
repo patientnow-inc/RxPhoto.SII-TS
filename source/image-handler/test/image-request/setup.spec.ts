@@ -336,7 +336,7 @@ describe("setup", () => {
       const event = {
         path: "/eyJidWNrZXQiOiJ2YWxpZEJ1Y2tldCIsImtleSI6InZhbGlkS2V5IiwiZWRpdHMiOnsidG9Gb3JtYXQiOiJwbmcifX0=",
         queryStringParameters: {
-          signature: "4d41311006641a56de7bca8abdbda91af254506107a2c7b338a13ca2fa95eac3",
+          signature: "8d20bc44347fc06c6f9197dfb9501304ea3b58a5d7189326b0703655b4244098",
         },
       };
 

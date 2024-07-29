@@ -17,11 +17,16 @@ import {
   RekognitionCompatibleImage,
   StatusCodes,
 } from "./lib";
+import { mockAwsS3 } from "./test/mock";
+import {ImageCache} from "./cache";
+
 
 export class ImageHandler {
   private readonly LAMBDA_PAYLOAD_LIMIT = 6 * 1024 * 1024;
+  private readonly MAX_IMAGE_WIDTH = 10000;
+  private readonly MAX_IMAGE_HEIGHT = 10000;
 
-  constructor(private readonly s3Client: S3, private readonly rekognitionClient: Rekognition) {}
+  constructor(private readonly s3Client: S3 | typeof mockAwsS3, private readonly rekognitionClient: Rekognition) {}
 
   /**
    * Creates a Sharp object from Buffer
@@ -127,6 +132,22 @@ export class ImageHandler {
   }
 
   /**
+   * Cache or return cached image.
+   * @param imageBuffer An image buffer.
+   * @param imageRequestInfo An image request.
+   * @returns Get image from cache on S3 if exists, cache otherwise.
+   */
+  async cache(imageBuffer: Buffer, imageRequestInfo: ImageRequestInfo): Promise<string> {
+    const { originalImage, edits } = imageRequestInfo;
+    if (edits && Object.keys(edits).length) {
+      const imageCache = new ImageCache(this.s3Client);
+      return imageCache.getOrCacheImage(imageBuffer, imageRequestInfo);
+    } else {
+      return this.s3Client.getSignedUrlPromise('getObject', {Bucket: imageRequestInfo.bucket, Key: imageRequestInfo.key});
+    }
+  }
+
+  /**
    * Applies image modifications to the original image based on edits.
    * @param originalImage The original sharp image.
    * @param edits The edits to be made to the original image.
@@ -212,6 +233,9 @@ export class ImageHandler {
 
     if ((resize.width != null && resize.width <= 0) || (resize.height != null && resize.height <= 0)) {
       throw new ImageHandlerError(StatusCodes.BAD_REQUEST, "InvalidResizeException", "The image size is invalid.");
+    }
+    if ((resize.width != null && resize.width > this.MAX_IMAGE_WIDTH) || (resize.height != null && resize.height > this.MAX_IMAGE_HEIGHT)) {
+      throw new ImageHandlerError(StatusCodes.BAD_REQUEST, "InvalidResizeException", `The image size exceeds max allowed size (${this.MAX_IMAGE_WIDTH}x${this.MAX_IMAGE_HEIGHT}).`);
     }
     return resize;
   }
