@@ -63,7 +63,13 @@ export interface RekognitionCompatibleImage {
 
 export interface ImageHandlerExecutionResult {
   statusCode: StatusCodes;
-  isBase64Encoded: boolean;
+  headers: Headers;
+}
+
+
+export interface ImageHandlerFailedExecutionResult {
+  statusCode: StatusCodes;
   headers: Headers;
   body: string;
 }
+

@@ -12,7 +12,8 @@ describe("index", () => {
   // Arrange
   process.env.SOURCE_BUCKETS = "source-bucket";
   const mockImage = Buffer.from("SampleImageContent\n");
-  const mockFallbackImage = Buffer.from("SampleFallbackImageContent\n");
+  const mockImageURL = `https://${process.env.SOURCE_BUCKETS}.s3.us-west-1.amazonaws.com/image.png`;
+  const mockFallbackImageURL = `https://${process.env.SOURCE_BUCKETS}.s3.us-west-1.amazonaws.com/fallback.png`;
 
   it("should return the image when there is no error", async () => {
     // Mock
@@ -21,24 +22,24 @@ describe("index", () => {
         return Promise.resolve({ Body: mockImage, ContentType: "image/jpeg" });
       },
     }));
+    mockAwsS3.getSignedUrlPromise.mockImplementationOnce(() => (
+      Promise.resolve(mockImageURL)
+    ));
+
     // Arrange
     const event: ImageHandlerEvent = { path: "/test.jpg" };
 
     // Act
     const result = await handler(event);
     const expectedResult = {
-      statusCode: StatusCodes.OK,
-      isBase64Encoded: true,
+      statusCode: StatusCodes.MOVED_PERMANENTLY,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Allow-Credentials": true,
-        "Content-Type": "image/jpeg",
-        Expires: undefined,
-        "Cache-Control": "max-age=31536000,public",
-        "Last-Modified": undefined,
-      },
-      body: mockImage.toString("base64"),
+        "Content-Type": "application/json",
+        "Location": mockImageURL,
+      }
     };
 
     // Assert
@@ -56,6 +57,10 @@ describe("index", () => {
         return Promise.resolve({ Body: mockImage, ContentType: "image/jpeg" });
       },
     }));
+    mockAwsS3.getSignedUrlPromise.mockImplementationOnce(() => (
+      Promise.resolve(mockImageURL)
+    ));
+
     // Arrange
     const event: ImageHandlerEvent = {
       path: "/eyJidWNrZXQiOiJzb3VyY2UtYnVja2V0Iiwia2V5IjoidGVzdC5qcGciLCJoZWFkZXJzIjp7IkN1c3RvbS1IZWFkZXIiOiJDdXN0b21WYWx1ZSJ9fQ==",
@@ -64,19 +69,14 @@ describe("index", () => {
     // Act
     const result = await handler(event);
     const expectedResult = {
-      statusCode: StatusCodes.OK,
+      statusCode: StatusCodes.MOVED_PERMANENTLY,
       headers: {
-        "Access-Control-Allow-Methods": "GET",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Allow-Credentials": true,
-        "Content-Type": "image/jpeg",
-        Expires: undefined,
-        "Cache-Control": "max-age=31536000,public",
-        "Last-Modified": undefined,
-        "Custom-Header": "CustomValue",
-      },
-      body: mockImage.toString("base64"),
-      isBase64Encoded: true,
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Methods": "GET",
+        "Content-Type": "application/json",
+        "Location": mockImageURL
+      }
     };
 
     // Assert
@@ -94,6 +94,10 @@ describe("index", () => {
         return Promise.resolve({ Body: mockImage, ContentType: "image/jpeg" });
       },
     }));
+    mockAwsS3.getSignedUrlPromise.mockImplementationOnce(() => (
+      Promise.resolve(mockImageURL)
+    ));
+
     // Arrange
     const event: ImageHandlerEvent = {
       path: "/test.jpg",
@@ -105,17 +109,13 @@ describe("index", () => {
     // Act
     const result = await handler(event);
     const expectedResult = {
-      statusCode: StatusCodes.OK,
-      isBase64Encoded: true,
+      statusCode: StatusCodes.MOVED_PERMANENTLY,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Content-Type": "image/jpeg",
-        Expires: undefined,
-        "Cache-Control": "max-age=31536000,public",
-        "Last-Modified": undefined,
-      },
-      body: mockImage.toString("base64"),
+        "Content-Type": "application/json",
+        "Location": mockImageURL
+      }
     };
 
     // Assert
@@ -140,7 +140,6 @@ describe("index", () => {
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.NOT_FOUND,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -169,6 +168,11 @@ describe("index", () => {
     };
 
     // Mock
+    mockAwsS3.headObject.mockImplementationOnce(() => ({
+      promise() {
+        return Promise.resolve({ Body: mockImage, ContentType: "image/jpeg" });
+      },
+    }));
     mockAwsS3.getObject.mockImplementationOnce(() => ({
       promise() {
         return Promise.resolve({ Body: mockImage, ContentType: "image/jpeg" });
@@ -179,7 +183,6 @@ describe("index", () => {
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -211,37 +214,39 @@ describe("index", () => {
     const event: ImageHandlerEvent = { path: "/test.jpg" };
 
     // Mock
+    mockAwsS3.headObject.mockReset();
+    mockAwsS3.headObject
+        .mockImplementationOnce(() => ({
+          promise() {
+            return Promise.reject(new ImageHandlerError(StatusCodes.INTERNAL_SERVER_ERROR, "UnknownError", null));
+          },
+        }));
+
     mockAwsS3.getObject.mockReset();
     mockAwsS3.getObject
-      .mockImplementationOnce(() => ({
-        promise() {
-          return Promise.reject(new ImageHandlerError(StatusCodes.INTERNAL_SERVER_ERROR, "UnknownError", null));
-        },
-      }))
-      .mockImplementationOnce(() => ({
-        promise() {
-          return Promise.resolve({
-            Body: mockFallbackImage,
-            ContentType: "image/png",
-          });
-        },
-      }));
+        .mockImplementationOnce(() => ({
+          promise() {
+            return Promise.reject(new ImageHandlerError(StatusCodes.INTERNAL_SERVER_ERROR, "UnknownError", null));
+          },
+        }));
+
+    mockAwsS3.getSignedUrlPromise.mockReset();
+    mockAwsS3.getSignedUrlPromise.mockImplementationOnce(() => (
+      Promise.resolve(mockFallbackImageURL)
+    ));
 
     // Act
     const result = await handler(event);
     const expectedResult = {
-      statusCode: StatusCodes.NOT_FOUND,
-      isBase64Encoded: true,
+      statusCode: StatusCodes.MOVED_PERMANENTLY,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
         "Access-Control-Allow-Credentials": true,
         "Access-Control-Allow-Origin": "*",
-        "Content-Type": "image/png",
-        "Cache-Control": "max-age=31536000,public",
-        "Last-Modified": undefined,
-      },
-      body: mockFallbackImage.toString("base64"),
+        "Content-Type": "application/json",
+        "Location": mockFallbackImageURL
+      }
     };
 
     // Assert
@@ -249,10 +254,13 @@ describe("index", () => {
       Bucket: "source-bucket",
       Key: "test.jpg",
     });
-    expect(mockAwsS3.getObject).toHaveBeenNthCalledWith(2, {
+    expect(mockAwsS3.getSignedUrlPromise).toHaveBeenNthCalledWith(1,
+      "getObject",
+      {
       Bucket: "fallback-image-bucket",
       Key: "fallback-image.png",
-    });
+      }
+    );
     expect(result).toEqual(expectedResult);
   });
 
@@ -263,18 +271,26 @@ describe("index", () => {
     };
 
     // Mock
+    mockAwsS3.headObject.mockReset();
+    mockAwsS3.headObject.mockImplementation(() => ({
+      promise() {
+        return Promise.reject(new ImageHandlerError(StatusCodes.NOT_FOUND, "NoSuchKey", "NoSuchKey error happened."));
+      },
+    }));
     mockAwsS3.getObject.mockReset();
     mockAwsS3.getObject.mockImplementation(() => ({
       promise() {
         return Promise.reject(new ImageHandlerError(StatusCodes.NOT_FOUND, "NoSuchKey", "NoSuchKey error happened."));
       },
     }));
+    mockAwsS3.getSignedUrlPromise.mockImplementationOnce(() => (
+      Promise.reject(new ImageHandlerError(StatusCodes.NOT_FOUND, "NoSuchKey", "NoSuchKey error happened."))
+    ));
 
     // Act
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.NOT_FOUND,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -294,10 +310,11 @@ describe("index", () => {
       Bucket: "source-bucket",
       Key: "test.jpg",
     });
-    expect(mockAwsS3.getObject).toHaveBeenNthCalledWith(2, {
-      Bucket: "fallback-image-bucket",
-      Key: "fallback-image.png",
-    });
+    expect(mockAwsS3.getSignedUrlPromise).toHaveBeenNthCalledWith(
+        1,
+        "getObject",
+        {"Bucket": "fallback-image-bucket", "Key": "fallback-image.png"}
+    );
     expect(result).toEqual(expectedResult);
   });
 
@@ -307,7 +324,17 @@ describe("index", () => {
     const event: ImageHandlerEvent = { path: "/test.jpg" };
 
     // Mock
+    mockAwsS3.headObject.mockImplementationOnce(() => ({
+      promise() {
+        return Promise.reject(new ImageHandlerError(StatusCodes.NOT_FOUND, "NoSuchKey", "NoSuchKey error happened."));
+      },
+    }));
     mockAwsS3.getObject.mockImplementationOnce(() => ({
+      promise() {
+        return Promise.reject(new ImageHandlerError(StatusCodes.NOT_FOUND, "NoSuchKey", "NoSuchKey error happened."));
+      },
+    }));
+    mockAwsS3.getSignedUrlPromise.mockImplementationOnce(() => ({
       promise() {
         return Promise.reject(new ImageHandlerError(StatusCodes.NOT_FOUND, "NoSuchKey", "NoSuchKey error happened."));
       },
@@ -317,7 +344,6 @@ describe("index", () => {
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.NOT_FOUND,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -356,7 +382,6 @@ describe("index", () => {
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.NOT_FOUND,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -399,7 +424,6 @@ describe("index", () => {
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.NOT_FOUND,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
@@ -444,7 +468,6 @@ describe("index", () => {
     const result = await handler(event);
     const expectedResult = {
       statusCode: StatusCodes.BAD_REQUEST,
-      isBase64Encoded: false,
       headers: {
         "Access-Control-Allow-Methods": "GET",
         "Access-Control-Allow-Headers": "Content-Type, Authorization",

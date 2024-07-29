@@ -12,6 +12,7 @@
     - [1. Clone the repository](#1-clone-the-repository)
     - [2. Unit Test](#2-unit-test)
     - [3. Build & Deploy](#3-build-and-deploy)
+    - [4. Run Using Script](#4-run-using-script)
 - [Collection of operational metrics](#collection-of-operational-metrics)
 - [External Contributors](#external-contributors)
 - [License](#license)
@@ -54,7 +55,6 @@ cd serverless-image-handler
 export MAIN_DIRECTORY=$PWD
 ```
 
-
 ### 2. Unit Test
 
 After making changes, run unit tests to make sure added customization passes the tests:
@@ -78,6 +78,20 @@ overrideWarningsEnabled=false npx cdk deploy\
 _Note:_
 - **MY_BUCKET**: name of an existing bucket in your account
 - **PROFILE_NAME**: name of an AWS CLI profile that has appropriate credentials for deploying in your preferred region
+
+### 4. Run using Makefile
+```
+make deploy PROFILE=default SECRETS=staging SECRETSKEY=image BUCKET=media-storage-2 SIGNATURE=Yes DEMOUI=Yes
+```
+
+#### Command-Line Arguments
+
+- `PROFILE`: AWS CLI profile to use for the deployment.
+- `SECRETS`: Name of the Secrets Manager secret to use.
+- `BUCKET`: Name of the S3 bucket to use.
+- `SIGNATURE`: String (Yes/No) indicating whether to enable the signature feature.
+- `DEMOUI`: String (Yes/No) indicating whether to deploy the demo UI.
+
 
 # Collection of operational metrics
 

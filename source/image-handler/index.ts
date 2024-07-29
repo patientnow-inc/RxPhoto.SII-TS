@@ -9,8 +9,9 @@ import { getOptions } from "../solution-utils/get-options";
 import { isNullOrWhiteSpace } from "../solution-utils/helpers";
 import { ImageHandler } from "./image-handler";
 import { ImageRequest } from "./image-request";
-import { Headers, ImageHandlerEvent, ImageHandlerExecutionResult, StatusCodes } from "./lib";
+import { Headers, ImageHandlerEvent, ImageHandlerExecutionResult, ImageHandlerFailedExecutionResult, StatusCodes } from "./lib";
 import { SecretProvider } from "./secret-provider";
+import {ImageCache} from "./cache";
 
 const awsSdkOptions = getOptions();
 const s3Client = new S3(awsSdkOptions);
@@ -23,36 +24,26 @@ const secretProvider = new SecretProvider(secretsManagerClient);
  * @param event The image handler request event.
  * @returns Processed request response.
  */
-export async function handler(event: ImageHandlerEvent): Promise<ImageHandlerExecutionResult> {
+export async function handler(event: ImageHandlerEvent): Promise<ImageHandlerExecutionResult | ImageHandlerFailedExecutionResult> {
   console.info("Received event:", JSON.stringify(event, null, 2));
 
   const imageRequest = new ImageRequest(s3Client, secretProvider);
   const imageHandler = new ImageHandler(s3Client, rekognitionClient);
   const isAlb = event.requestContext && Object.prototype.hasOwnProperty.call(event.requestContext, "elb");
 
+  let headers = getResponseHeaders(true, isAlb);
+
   try {
     const imageRequestInfo = await imageRequest.setup(event);
     console.info(imageRequestInfo);
 
     const processedRequest = await imageHandler.process(imageRequestInfo);
-
-    let headers = getResponseHeaders(false, isAlb);
-    headers["Content-Type"] = imageRequestInfo.contentType;
-    // eslint-disable-next-line dot-notation
-    headers["Expires"] = imageRequestInfo.expires;
-    headers["Last-Modified"] = imageRequestInfo.lastModified;
-    headers["Cache-Control"] = imageRequestInfo.cacheControl;
-
-    // Apply the custom headers overwriting any that may need overwriting
-    if (imageRequestInfo.headers) {
-      headers = { ...headers, ...imageRequestInfo.headers };
-    }
-
+    const imageBuffer = Buffer.from(processedRequest, "base64")
+    const imageURL = await imageHandler.cache(imageBuffer, imageRequestInfo);
+    Object.assign(headers, {Location: imageURL});
     return {
-      statusCode: StatusCodes.OK,
-      isBase64Encoded: true,
-      headers,
-      body: processedRequest,
+      statusCode: StatusCodes.MOVED_PERMANENTLY,
+      headers: headers
     };
   } catch (error) {
     console.error(error);
@@ -65,24 +56,21 @@ export async function handler(event: ImageHandlerEvent): Promise<ImageHandlerExe
       !isNullOrWhiteSpace(DEFAULT_FALLBACK_IMAGE_KEY)
     ) {
       try {
-        const defaultFallbackImage = await s3Client
-          .getObject({
-            Bucket: DEFAULT_FALLBACK_IMAGE_BUCKET,
-            Key: DEFAULT_FALLBACK_IMAGE_KEY,
-          })
-          .promise();
+        const defaultFallbackImageURL = await s3Client
+          .getSignedUrlPromise(
+            'getObject',
+            {
+              Bucket: DEFAULT_FALLBACK_IMAGE_BUCKET,
+              Key: DEFAULT_FALLBACK_IMAGE_KEY,
+            }
+          );
 
-        const headers = getResponseHeaders(false, isAlb);
-        headers["Content-Type"] = defaultFallbackImage.ContentType;
-        headers["Last-Modified"] = defaultFallbackImage.LastModified;
-        headers["Cache-Control"] = "max-age=31536000,public";
-
+        let headers = getResponseHeaders(true, isAlb);
+        Object.assign(headers, {Location: defaultFallbackImageURL});
         return {
-          statusCode: error.status ? error.status : StatusCodes.INTERNAL_SERVER_ERROR,
-          isBase64Encoded: true,
-          headers,
-          body: defaultFallbackImage.Body.toString("base64"),
-        };
+          statusCode: StatusCodes.MOVED_PERMANENTLY,
+          headers: headers
+        }
       } catch (error) {
         console.error("Error occurred while getting the default fallback image.", error);
       }
@@ -91,8 +79,7 @@ export async function handler(event: ImageHandlerEvent): Promise<ImageHandlerExe
     const { statusCode, body } = getErrorResponse(error);
     return {
       statusCode,
-      isBase64Encoded: false,
-      headers: getResponseHeaders(true, isAlb),
+      headers: headers,
       body,
     };
   }
